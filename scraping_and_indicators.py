@@ -108,29 +108,3 @@ def add_specified_indicators(df, indicator_list, setting=None):
 
     return df
 
-#%%
-if __name__ == "__main__":
-    # Step 1: Scrape historical data for a given stock ticker
-    prices = scrape_prices_yfinance('YINN', '2021-01-01', '2024-01-01')
-
-    # Step 2: Add specified indicators if data is present
-    if not prices.empty:
-        # Define the indicators to add and custom settings
-        indicator_list = ['SMA', 'RSI', 'BBANDS', 'MACD', 'ATR']
-        custom_settings = {
-            'SMA': {'timeperiod': 50},  # Custom SMA period
-            'RSI': {'timeperiod': 14},   # Custom RSI period
-            'BBANDS': {'timeperiod': 20, 'nbdevup': 2.0, 'nbdevdn': 2.0, 'price': 'close'},  # Custom Bollinger Bands settings
-            'MACD': {'fastperiod': 12, 'slowperiod': 26, 'signalperiod': 9},  # Custom MACD settings
-            'ATR': {'timeperiod': 14}  # Custom ATR settings
-        }
-
-        # Add indicators using the add_specified_indicators function
-        prices_with_indicators = add_specified_indicators(prices, indicator_list, custom_settings)
-
-        # Step 3: Save the updated DataFrame with indicators to a CSV file
-        csv_filename = os.path.join(dir, 'yinn_with_specified_indicators_yfinance.csv')
-        prices_with_indicators.to_csv(csv_filename)
-        print(f"Updated data saved to {csv_filename}")
-    else:
-        print("No data available for the specified ticker and date range.")
