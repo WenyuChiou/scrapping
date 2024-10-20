@@ -109,63 +109,130 @@ if __name__ == "__main__":
 
 
 #%% Import required libraries
-import ffn
-import talib
-import os
+#%% Function to scrape prices and add indicators using yfinance
+#%% Function to scrape prices and add indicators using yfinance
+import yfinance as yf
 import pandas as pd
+import os
 from talib import abstract
 
 # Directory for saving files
 dir = r"C:\Users\user\Desktop\investment\python\scrapping\scraping_data"
 os.makedirs(dir, exist_ok=True)
 
-#%% Function to scrape prices and add indicators
-def scrape_and_analyze_prices(ticker, start_date, end_date):
-    prices = ffn.get([ticker], start=start_date, end=end_date)
-    if prices.empty:
-        print(f"No data found for {ticker}.")
+def scrape_prices_yfinance(ticker, start_date, end_date):
+    """
+    Scrapes historical prices using yfinance and returns a DataFrame.
+
+    Parameters:
+        ticker (str): Stock ticker symbol (e.g., 'YINN').
+        start_date (str): Start date for scraping in the format 'YYYY-MM-DD'.
+        end_date (str): End date for scraping in the format 'YYYY-MM-DD'.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the stock price data.
+    """
+    try:
+        # Step 1: Scrape historical price data
+        print(f"Scraping historical data for {ticker} from {start_date} to {end_date}...")
+        df = yf.download(ticker, start=start_date, end=end_date)
+
+        # Check if data is available
+        if df.empty:
+            print(f"No data found for {ticker}. Please verify the ticker symbol or date range.")
+            return pd.DataFrame()
+
+        # Step 2: Rename columns to lowercase to ensure consistency
+        df.rename(columns={
+            'Open': 'open',
+            'High': 'high',
+            'Low': 'low',
+            'Close': 'close',
+            'Adj Close': 'adj_close',
+            'Volume': 'volume'
+        }, inplace=True)
+
+        return df
+
+    except Exception as e:
+        print(f"Error occurred while scraping data for {ticker}: {e}")
         return pd.DataFrame()
-    
-    # Add SMA and Bollinger Bands
-    for period in [20, 50, 100, 150]:
-        prices[f'{ticker}_sma_{period}'] = talib.SMA(prices[ticker].values, timeperiod=period)
-    upper, middle, lower = talib.BBANDS(prices[ticker].values, timeperiod=5, nbdevup=2, nbdevdn=2, matype=0)
-    prices[['upperband_5day', 'middleband_5day', 'lowerband_5day']] = upper, middle, lower
 
-    # Add MACD
-    macd, signal, hist = talib.MACD(prices[ticker].values, fastperiod=12, slowperiod=26, signalperiod=9)
-    prices[['macd', 'macdsignal', 'macdhist']] = macd, signal, hist
+#%%
+def add_indicators(df, indicator_list, setting=None):
+    """
+    Adds specified technical indicators to the given DataFrame.
 
-    csv_filename = os.path.join(dir, f'{ticker}.csv')
-    prices.to_csv(csv_filename)
-    print(f"Data saved to {csv_filename}")
+    Parameters:
+        df (pd.DataFrame): DataFrame containing stock price data.
+        indicator_list (list): List of indicators to add (e.g., ['SMA', 'RSI', 'BBANDS']).
+        setting (dict, optional): Custom settings for indicators, e.g., {'SMA': {'timeperiod': 50}}.
+        
+    Returns:
+        pd.DataFrame: Updated DataFrame with added indicators.
+    """
+    # Dictionary to specify available indicators in TA-Lib
+    available_indicators = ['SMA', 'EMA', 'RSI', 'BBANDS', 'MACD']
 
-    return prices
+    for ind in indicator_list:
+        ind_upper = ind.upper()
+        if ind_upper not in available_indicators:
+            print(f"Warning: Indicator '{ind}' is not supported.")
+            continue
 
-#%% Indicator Class
-class Indicator:
-    def __init__(self, stock_df):
-        self.df = stock_df
+        try:
+            # Prepare the custom settings if provided, otherwise use default settings
+            if setting is None or ind_upper not in setting:
+                # Use the default settings
+                output = eval(f"abstract.{ind_upper}(df)")
+            else:
+                # Use custom settings for the indicator
+                output = eval(f"abstract.{ind_upper}(df, **setting[ind_upper])")
 
-    def add_indicator(self, indicator_list, setting=None):
-        for ind in indicator_list:
-            output = eval(f'abstract.{ind}(self.df)' if setting is None else f'abstract.{ind}(self.df, {setting.get(ind)})')
-            output.name = ind.lower() if isinstance(output, pd.Series) else None
-            self.df = pd.merge(self.df, pd.DataFrame(output), left_on=self.df.index, right_on=output.index)
-        return self.df.set_index(self.df.columns[0])
+            # Handle different types of outputs from TA-Lib
+            if isinstance(output, pd.Series):
+                output.name = ind.lower()
+                df = pd.concat([df, output], axis=1)
+            elif isinstance(output, pd.DataFrame):
+                output.columns = [f"{ind.lower()}_{col}" for col in output.columns]
+                df = pd.concat([df, output], axis=1)
+            elif isinstance(output, tuple) and ind_upper == 'MACD':
+                # MACD returns a tuple (macd, signal, hist)
+                macd, signal, hist = output
+                df[f'{ind.lower()}_line'] = macd
+                df[f'{ind.lower()}_signal'] = signal
+                df[f'{ind.lower()}_hist'] = hist
 
-#%% Main script
+        except Exception as e:
+            print(f"Failed to add indicator '{ind}': {e}")
+
+    return df
+
+
+
+#%%
 if __name__ == "__main__":
-    prices = scrape_and_analyze_prices('spx', '2021-01-01', '2024-01-01')
+    # Step 1: Scrape historical data for a given stock ticker
+    prices = scrape_prices_yfinance('YINN', '2021-01-01', '2024-01-01')
 
-    #custom_settings = {
-    #'RSI': "{'timeperiod': 14}",
-    #'MACD': "{'fastperiod': 10, 'slowperiod': 30, 'signalperiod': 8}"}
+    # Step 2: Add indicators if data is present
     if not prices.empty:
-        cc = Indicator(prices)
-        updated_df = cc.add_indicator(['RSI', 'MACD'])
-        updated_df.to_csv(os.path.join(dir, 'spx_with_indicators.csv'))
-        print(f"Updated data saved to {os.path.join(dir, 'spx_with_indicators.csv')}")
+        # Define the indicators to add and custom settings
+        indicator_list = ['SMA', 'RSI', 'BBANDS']
+        custom_settings = {
+            'SMA': {'timeperiod': 50},
+            'RSI': {'timeperiod': 14},
+            'BBANDS': {'timeperiod': 5, 'nbdevup': 2.0, 'nbdevdn': 2.0, 'matype': 0}
+        }
 
+        # Add indicators using the add_indicators function
+        prices_with_indicators = add_indicators(prices, indicator_list, custom_settings)
+
+        # Step 3: Save the updated DataFrame with indicators to a CSV file
+        csv_filename = os.path.join(dir, 'yinn_with_indicators_yfinance.csv')
+        prices_with_indicators.to_csv(csv_filename)
+        print(f"Updated data saved to {csv_filename}")
+    else:
+        print("No data available for the specified ticker and date range.")
 
 # %%
