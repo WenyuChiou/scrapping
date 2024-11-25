@@ -1,0 +1,12 @@
+Metadata-Version: 2.1
+Name: scrapping
+Version: 0.2
+Summary: A package for scraping Taiwan futures with adding technical indicators and other related data.
+Author: Wenyu
+Author-email: wenyuchiou12@gmail.com
+Requires-Dist: FinMind
+Requires-Dist: pandas
+Requires-Dist: yfinance
+Requires-Dist: matplotlib
+Requires-Dist: TA-Lib
+Requires-Dist: os

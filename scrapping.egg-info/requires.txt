@@ -1,0 +1,6 @@
+FinMind
+pandas
+yfinance
+matplotlib
+TA-Lib
+os
